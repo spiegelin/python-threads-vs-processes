@@ -76,12 +76,12 @@ python --version
 ```
 
 ## Run the comparison
-This shows the differences for CPU tasks
+This shows the differences for CPU tasks:
 ```bash
 python comparison.py
 ```
 
-For I/O differences use (works same with GIL and no GIL):
+For I/O differences use the following script instead (works same with GIL and without GIL):
 ```python
 import threading
 import time
@@ -203,7 +203,7 @@ With GIL:
 
 Therefore, in traditional Python, multiprocessing is preferred for CPU-bound tasks. The GIL makes multithreading worse than single-threaded for CPU-bound work.
 
-## Why Multithreading exists in Traditional Python? Whe is it useful?
+## Why Multithreading exists in Traditional Python? Is it useful?
 Multithreading is useful in Python, but not for CPU-bound tasks. It helps with I/O-bound work because the GIL is released during I/O.
 
 1. I/O-bound tasks
@@ -327,7 +327,7 @@ def handle_request(request):
 ### Why is the GIL released? Why is it not always blocking?
 The GIL makes that only one thread can run Python code at a time. "Released" means the thread temporarily gives up the power of running code, thus releasing the GIL, so another thread can run python code.
 - During I/O, the thread is waiting (not using the CPU), so it releases the GIL and other threads can run.
-- During I/O, the thread is waiting (blocked), not running Python bytecode. Since it's not modifying Python objects, there's no risk of race conditions, so the GIL can be released.
+- In other words, during I/O, the thread is waiting (blocked), not running Python bytecode. Since it's not modifying Python objects, there's no risk of race conditions, so the GIL can be released.
 
 Example:
 ```python
@@ -355,12 +355,6 @@ def fetch_url(url, results):
     print(f"Thread {threading.current_thread().name} done")
     results.append(response.status_code)
 
-def fetch_url_process(url, results):
-    print(f"Process {multiprocessing.current_process().name} starting")
-    response = requests.get(url)
-    print(f"Process {multiprocessing.current_process().name} done")
-    results.append(response.status_code)
-
 # All 4 threads can make requests simultaneously
 # Because GIL is released during network wait time
 def main():
@@ -376,8 +370,12 @@ def main():
         t.start()
         threads.append(t)
 
+   # join() is used to wait for threads to finish
+   # if we dont wait, the program might exit early, so we will not see results
+   # results = []
+   # Try and comment out the next 2 lines and see for yourself
     for t in threads:
-        t.join()   # wait for threads to finish, if we dont wait, the program might exit early, so we will not see results
+        t.join()
 
     end = time.perf_counter()
     print("Time taken: ", end - start)
@@ -389,27 +387,8 @@ def main():
     end = time.perf_counter()
     print("Time taken: ", end - start)
 
-    # -------------- Multi Processing --------------- #
-    manager = multiprocessing.Manager()
-    results_process = manager.list()   # shared list between processes
-
-    processes = []
-    start = time.perf_counter()
-
-    for i in range(4):
-        p = multiprocessing.Process(target=fetch_url_process, args=(url, results_process))
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
-
-    end = time.perf_counter()
-    print("Multiprocessing time:", end - start)
-
     print("\nResults (threads):", list(results_thread))
     print("Results (single):", results_single)
-    print("Results (processes):", list(results_process))
 
 if __name__ == "__main__":
     main()
@@ -426,7 +405,7 @@ You could, but multithreading is often better for I/O:
 | Memory          | Shared               | Separate (more RAM) |
 | Data sharing    | Easy (shared memory) | Hard (need IPC)     |
 | I/O performance | Same (GIL released)  | Same                |
-| Best for I/O    | ✅ Yes                | ⚠️ Overkill          |
+| Best for I/O    | Adequate             | Overkill            |
 
 
 ## Multithreading vs Multiprocessing (No GIL)
@@ -478,6 +457,16 @@ Bottom line: Without GIL, multithreading typically wins for CPU-bound tasks due 
 
 ## What is the GIL? Why we need it?
 The Global Interpreter Lock (GIL) is a mutex (lock) that allows only one thread to execute Python bytecode at a time, even on multi-core systems.
+
+### TL;DR
+The GIL exists because:
+1. It protects Python's memory management from race conditions
+2. It simplifies C extension development
+3. It was a pragmatic choice when Python was created
+
+The cost: CPU-bound Python code can't use multiple cores effectively with threads, which is why multiprocessing is preferred for CPU-bound work.
+
+The GIL is a compromise: it simplifies the implementation and prevents many bugs, but limits parallelism for CPU-bound code.
 
 ### Why does it exist?
 
@@ -545,16 +534,6 @@ The GIL is released during I/O operations:
 - Some NumPy operations (releases GIL internally)
 
 This is why multithreading works well for I/O-bound tasks.
-
-### Summary
-The GIL exists because:
-1. It protects Python's memory management from race conditions
-2. It simplifies C extension development
-3. It was a pragmatic choice when Python was created
-
-The cost: CPU-bound Python code can't use multiple cores effectively with threads, which is why multiprocessing is preferred for CPU-bound work.
-
-The GIL is a compromise: it simplifies the implementation and prevents many bugs, but limits parallelism for CPU-bound code.
 
 ## What is the `if __name__ == "__main__":`?
 
@@ -704,16 +683,6 @@ Main Process:
       ├─ __name__ == "good_multiprocessing" → False
       ├─ Guard prevents process.start()
       └─ Just runs worker() function
-```
-
-### What "protect the endpoint" means
-
-"Protect the entry point" means guarding the code that starts execution so it only runs when the script is executed directly, not when imported.
-
-```python
-# Entry point = where execution starts
-if __name__ == "__main__":  # Protects the entry point
-    main()  # Only runs when executed directly
 ```
 
 ### Benefits
