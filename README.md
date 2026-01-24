@@ -39,7 +39,7 @@ pyenv --version
 ```
 
 ## Installing python versions
-After `pvenv` is installed, we can use it to manage different python versions. We can install any version, but we are interested in 2 for comparison:
+After `pyvenv` is installed, we can use it to manage different python versions. We can install any version, but we are interested in 2 for comparison:
 - Python3.14t: No GIL (supports multi-threading)
 - Python3.14: GIL
 
@@ -57,13 +57,19 @@ pyenv versions
 # Select a global version (python to use in all shells)
 pyenv global 3.14.2
 
-# Select a version per project (only use python for a specific project)
+# (Preffered) Select a version per project (only use python for a specific project) and create a virtual environment locally
 pyenv local 3.14.2
+pyenv local 3.14.2t # switch version
+python -m venv venv-gil # create virtual envs
+python -m venv venv-t
+source venv-t/bin/activate
+...
+deactivate
 
 # Only use that python version for the current shell session
 pyenv shell 3.14.2
 
-# (Preferred) Create a virtual environment for each version
+# Create a virtual environment for each version
 pyenv virtualenv 3.14.2t venv-t
 pyenv virtualenv 3.14.2 venv-gil
 pyenv activate venv-t
@@ -73,90 +79,24 @@ pyenv activate venv-gil
 
 # Revise
 python --version
+
+# List virtual environments
+pyenv virtualenvs
+
+# Delete a virtual environment
+pyenv uninstall venv-gil
+pyenv uninstall venv-t
 ```
 
 ## Run the comparison
 This shows the differences for CPU tasks:
 ```bash
-python comparison.py
+python cpu-comparison.py
 ```
 
 For I/O differences use the following script instead (works same with GIL and without GIL):
-```python
-import threading
-import time
-import requests
-import multiprocessing
-
-def fetch_url(url, results):
-    print(f"Thread {threading.current_thread().name} starting")
-    
-    # This is I/O - GIL is RELEASED here!
-    response = requests.get(url)  # Waiting for network...
-    # While waiting, other threads can run!
-    
-    print(f"Thread {threading.current_thread().name} done")
-    results.append(response.status_code)
-
-def fetch_url_process(url, results):
-    print(f"Process {multiprocessing.current_process().name} starting")
-    response = requests.get(url)
-    print(f"Process {multiprocessing.current_process().name} done")
-    results.append(response.status_code)
-
-# All 4 threads can make requests simultaneously
-# Because GIL is released during network wait time
-def main():
-    url = "https://www.google.com/"
-    results_thread = []
-    results_single = []
-
-    # # -------------- Multi Threaded --------------- #
-    threads = []
-    start = time.perf_counter()
-    for i in range(4):
-        t = threading.Thread(target=fetch_url, args=(url, results_thread))
-        t.start()
-        threads.append(t)
-
-    for t in threads:
-        t.join()   # wait for threads to finish, if we dont wait, the program might exit early, so we will not see results
-
-    end = time.perf_counter()
-    print("Time taken: ", end - start)
-
-    # -------------- Single threaded --------------- #
-    start = time.perf_counter()
-    for i in range(4):
-        fetch_url(url, results_single)
-    end = time.perf_counter()
-    print("Time taken: ", end - start)
-
-    # -------------- Multi Processing --------------- #
-    manager = multiprocessing.Manager()
-    results_process = manager.list()   # shared list between processes
-
-    processes = []
-    start = time.perf_counter()
-
-    for i in range(4):
-        p = multiprocessing.Process(target=fetch_url_process, args=(url, results_process))
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
-
-    end = time.perf_counter()
-    print("Multiprocessing time:", end - start)
-
-    print("\nResults (threads):", list(results_thread))
-    print("Results (single):", results_single)
-    print("Results (processes):", list(results_process))
-
-if __name__ == "__main__":
-    main()
-
+```bash
+python io-comparison.py
 ```
 
 ## What is the difference between multi-threading and multi-processing in Python?
