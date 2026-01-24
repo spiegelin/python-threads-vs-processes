@@ -3,7 +3,7 @@ import time
 import requests
 import multiprocessing
 
-def fetch_url(url, results, kind="thread"):
+def fetch_url(url, results, kind="thread", lock=None):
     """
     Fetch a URL and add the status code to the results list
     """
@@ -15,7 +15,12 @@ def fetch_url(url, results, kind="thread"):
         # While waiting, other threads can run
         
         print(f"Thread {threading.current_thread().name} done")
-        results.append(response.status_code)
+        # Thread-safe append using lock
+        if lock:
+            with lock:
+                results.append(response.status_code)
+        else:
+            results.append(response.status_code)
 
     elif kind == "process":
         print(f"Process {multiprocessing.current_process().name} starting")
@@ -31,12 +36,13 @@ def main():
     url = "https://www.google.com/"
     results_thread = []
     results_single = []
+    lock = threading.Lock()  # Thread-safe list access
 
     # # -------------- Multi Threaded --------------- #
     threads = []
     start = time.perf_counter()
     for _ in range(4):
-        t = threading.Thread(target=fetch_url, args=(url, results_thread))
+        t = threading.Thread(target=fetch_url, args=(url, results_thread, "thread", lock))
         t.start()
         threads.append(t)
 
@@ -49,7 +55,7 @@ def main():
     # -------------- Single threaded --------------- #
     start = time.perf_counter()
     for _ in range(4):
-        fetch_url(url, results_single)
+        fetch_url(url, results_single, "thread", None)  # No lock needed for single-threaded
     end = time.perf_counter()
     print("Time taken: ", end - start)
 
