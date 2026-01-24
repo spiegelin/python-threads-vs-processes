@@ -159,6 +159,189 @@ if __name__ == "__main__":
 
 ```
 
+## What is the difference between multi-threading and multi-processing in Python?
+
+### TL;DR
+**Multithreading**: Multiple workers in the same office (shared space)  
+**Multiprocessing**: Multiple workers in separate offices (separate spaces)
+
+### A little story to understand the concepts (multi-threading, multi-processing, GIL)
+
+A process is a running program with its own memory space.
+
+- Has its own memory (variables, data)
+- Isolated from other processes
+- Can crash without affecting others
+- Heavier to create (more resources)
+
+Like a house, it's your personal space. If for some reason it breaks down or catches fire, it only affects you (not your neighbours).
+- You can make lunch in 20 minutes
+- Clean the house in 3 hours
+- Take out the trash in 5 minutes
+
+You took a total of 3 hours and 25 minutes to complete the process, but hey, you are alone (isolated), no one is bothering you, if you forget to do something it only affects your house (fault tolerance), etc.
+
+Now imagine that there is a hole in the pavement, it affects all your neighbours (and you), so you collectively call the government for it to be solved. However, the government responds when it pleases, so you have to call them again and again. Now, if all of you, from your own houses, used your own telephone to call the government, it makes the process faster than if you were the only one calling and waiting for a response.
+- That will be multi-processing.
+
+A thread is a path of execution within a process.
+
+- Shares memory with other threads in the same process
+- Lightweight (easy to create)
+- If one crashes, it can affect the whole process
+- Faster to create
+
+Now, instead of owning a house, you rent a house, so you have roommates with which you share the kitchen, bathroom, etc. If someone decides to break the door, it affects everyone in the house (including you). However, you can divide chores.
+- One roommate can make lunch in 20 minutes.
+- One can clean half the house in 1.5 hours.
+- One can clean the other half of the house in 1.5 hours.
+- You can take out the trash in 5 minutes.
+
+You might be thinking that it took the same time (3 hours and 25 minutes), and you won't be wrong, but neither will you be right. In essence, it took a combined effort of that time, but since each of you did it at the same time, separately, at most it took 1.5 hours (the longest time for 1 chore). That's the wall-clock time (the actual time that passed while you were all working in parallel).
+
+Now imagine that there is a hole in the pavement, but it's in the entrance of your house, so it only affects your roommates (and you). You collectively call the government for it to be solved, however the government responds when it pleases, so you have to call them again and again. Now, if all of you, from your own rooms, used your own telephone to call the government, it makes the process faster than if you were the only one calling and waiting for a response (assuming each of you has a telephone inside the room)
+- But what if there is only 1 telephone? You simply don't have enough money or space for a telephone in each room (that's where you know when to use multi-processing instead of multi-threading, when the shared resources are not enough for all the threads)
+- But what if your landlord only allows you to have 1 telephone even though you can have more? (then it will basically be the same as calling on your own, one at a time. Your landlord is what in Python is called the "GIL" - the Global Interpreter Lock. It's like a rule that says only one person can use the telephone at a time, even though you have multiple roommates who could have one)
+  - That happens in the normal Python installations, but since Python 3.13+ (with the `--disable-gil` build flag) and Python 3.14t, you can have a free-threading build that removes the GIL.
+
+
+### Visual comparison
+
+```mermaid
+flowchart TB
+
+subgraph MP[Multi-processing]
+    P1[Process 1: <br /> Memory: A, B <br /> Thread 1]
+    P2[Process 2: <br /> Memory: C, D <br /> Thread 1]
+end
+
+subgraph MT[Multi-threading]
+    direction TB
+    P[Process 1: <br /> Memory: A, B, C, D]
+    T1[Thread 1]
+    T2[Thread 2]
+    P --> T1
+    P --> T2
+end
+```
+
+### In Python code
+
+#### Multithreading example:
+
+```python
+import threading
+
+shared_list = []  # All threads share this!
+
+def worker(thread_id):
+    shared_list.append(thread_id)  # All threads can modify this
+    print(f"Thread {thread_id} added to shared list")
+
+# Create threads
+threads = []
+for i in range(4):
+    t = threading.Thread(target=worker, args=(i,))
+    threads.append(t)
+    t.start()
+
+for t in threads:
+    t.join()
+
+print(shared_list)  # [0, 1, 2, 3] - all threads modified same list!
+```
+
+#### Multiprocessing example:
+
+```python
+import multiprocessing
+
+def worker(process_id):
+    # Each process has its own copy of this list!
+    local_list = []
+    local_list.append(process_id)
+    print(f"Process {process_id} has list: {local_list}")
+    return local_list
+
+# Create processes
+processes = []
+results = []
+for i in range(4):
+    p = multiprocessing.Process(target=worker, args=(i,))
+    processes.append(p)
+    p.start()
+
+for p in processes:
+    p.join()
+
+# Each process had its own separate list!
+```
+
+### Key differences
+
+| Aspect              | Multithreading              | Multiprocessing                |
+| ------------------- | --------------------------- | ------------------------------ |
+| **Memory**          | Shared (same memory space)  | Separate (each has own memory) |
+| **Speed to create** | Fast (~0.001ms)             | Slow (~10-100ms)               |
+| **Memory usage**    | Low (shared)                | High (duplicated)              |
+| **Data sharing**    | Easy (direct access)        | Hard (need queues/pipes)       |
+| **Isolation**       | Low (one crash affects all) | High (isolated)                |
+| **Python GIL**      | Shared (one GIL)            | Separate (each has own GIL)    |
+
+### The Python GIL problem
+
+#### Multithreading with GIL:
+```python
+# All threads share ONE GIL
+# Only one thread can run Python code at a time
+# Even on 4 CPU cores, only 1 thread runs at a time
+# Result: NO true parallelism for CPU-bound tasks
+```
+
+#### Multiprocessing:
+```python
+# Each process has its OWN GIL
+# 4 processes = 4 GILs = 4 threads can run simultaneously
+# Result: TRUE parallelism for CPU-bound tasks
+```
+
+### A Real-world analogy from ChatGPT
+
+#### Multithreading = restaurant with multiple waiters
+- All waiters share the same kitchen (shared memory)
+- Only one waiter can use the kitchen at a time (GIL)
+- But waiters can take orders while others wait (I/O parallelism)
+- If one waiter crashes, restaurant might close (shared process)
+
+#### Multiprocessing = multiple restaurants
+- Each restaurant has its own kitchen (separate memory)
+- All restaurants can cook simultaneously (true parallelism)
+- If one restaurant closes, others keep running (isolation)
+- But harder to share ingredients between restaurants (need IPC)
+
+
+### Summary
+
+**Multithreading:**
+- Multiple threads in one process
+- Share memory
+- Fast to create
+- Good for I/O-bound tasks
+- Limited by GIL for CPU-bound tasks
+
+**Multiprocessing:**
+- Multiple separate processes
+- Separate memory
+- Slower to create
+- Good for CPU-bound tasks
+- True parallelism (each process has its own GIL)
+
+**Simple rule:**
+- I/O waiting (files, network, database) → Multithreading
+- CPU computation (math, processing) → Multiprocessing
+
+Remember: threads are roommates (share everything), processes are neighbors (separate houses).
+
 ## Why is multi-threading (with GIL) slower than single-threaded?
 With the GIL, multithreading can be slower than single-threaded due to overhead:
 
