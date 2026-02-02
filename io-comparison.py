@@ -59,27 +59,9 @@ def main():
     end = time.perf_counter()
     print("Time taken: ", end - start)
 
-    # -------------- Multi Processing --------------- #
-    manager = multiprocessing.Manager()
-    results_process = manager.list()   # shared list between processes
-
-    processes = []
-    start = time.perf_counter()
-
-    for _ in range(4):
-        p = multiprocessing.Process(target=fetch_url, args=(url, results_process, "process"))
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
-
-    end = time.perf_counter()
-    print("Multiprocessing time:", end - start)
-
     print("\nResults (threads):", list(results_thread))
     print("Results (single):", results_single)
-    print("Results (processes):", list(results_process))
+    #print("Results (processes):", list(results_process))
 
 if __name__ == "__main__":
     main()
